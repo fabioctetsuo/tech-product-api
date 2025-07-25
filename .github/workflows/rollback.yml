@@ -1,0 +1,115 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: 'Kubernetes namespace to rollback'
+        required: true
+        default: 'products-service'
+        type: string
+      revision:
+        description: 'Revision number to rollback to (leave empty for previous)'
+        required: false
+        type: string
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+        
+    - name: Update kube config
+      run: aws eks update-kubeconfig --region us-east-1 --name tech_challenge_cluster
+      
+    - name: Check deployment history
+      id: history
+      run: |
+        echo "Current deployment history:"
+        kubectl rollout history deployment/tech-product-api -n ${{ inputs.namespace }}
+        
+        # Get current revision
+        CURRENT_REVISION=$(kubectl rollout history deployment/tech-product-api -n ${{ inputs.namespace }} --revision=0 2>/dev/null | grep -o '[0-9]*' | head -1 || echo "1")
+        echo "current_revision=$CURRENT_REVISION" >> $GITHUB_OUTPUT
+        
+        # Determine target revision
+        if [ -n "${{ inputs.revision }}" ]; then
+          TARGET_REVISION="${{ inputs.revision }}"
+        else
+          # Rollback to previous revision
+          TARGET_REVISION=$((CURRENT_REVISION - 1))
+        fi
+        
+        echo "target_revision=$TARGET_REVISION" >> $GITHUB_OUTPUT
+        echo "Rolling back to revision: $TARGET_REVISION"
+        
+    - name: Perform rollback
+      run: |
+        if [ "${{ steps.history.outputs.target_revision }}" -le 0 ]; then
+          echo "❌ No previous revision available for rollback"
+          exit 1
+        fi
+        
+        echo "🔄 Rolling back to revision ${{ steps.history.outputs.target_revision }}..."
+        kubectl rollout undo deployment/tech-product-api -n ${{ inputs.namespace }} --to-revision=${{ steps.history.outputs.target_revision }}
+        
+    - name: Wait for rollback to complete
+      run: |
+        echo "⏳ Waiting for rollback to complete..."
+        kubectl rollout status deployment/tech-product-api -n ${{ inputs.namespace }} --timeout=300s
+        
+    - name: Verify rollback
+      run: |
+        echo "✅ Rollback completed successfully!"
+        echo ""
+        echo "Current deployment status:"
+        kubectl get pods -n ${{ inputs.namespace }}
+        kubectl get deployment tech-product-api -n ${{ inputs.namespace }}
+        
+    - name: Health check
+      run: |
+        echo "🏥 Performing health check..."
+        
+        # Get the service URL
+        SERVICE_URL=$(kubectl get ingress tech-product-api-ingress -n ${{ inputs.namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+        
+        if [ -n "$SERVICE_URL" ]; then
+          echo "Service URL: http://$SERVICE_URL"
+          
+          # Wait a bit for the service to be ready
+          sleep 30
+          
+          # Perform health check
+          if curl -f -s "http://$SERVICE_URL/health" > /dev/null; then
+            echo "✅ Service is healthy after rollback"
+          else
+            echo "⚠️  Health check failed, but rollback completed"
+          fi
+        else
+          echo "⚠️  Service URL not available"
+        fi
+        
+    - name: Rollback summary
+      run: |
+        echo "## 🔄 Rollback Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Rollback Details:**" >> $GITHUB_STEP_SUMMARY
+        echo "- **Namespace:** ${{ inputs.namespace }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **From Revision:** ${{ steps.history.outputs.current_revision }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **To Revision:** ${{ steps.history.outputs.target_revision }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Useful Commands:**" >> $GITHUB_STEP_SUMMARY
+        echo "```bash" >> $GITHUB_STEP_SUMMARY
+        echo "kubectl get pods -n ${{ inputs.namespace }}" >> $GITHUB_STEP_SUMMARY
+        echo "kubectl logs -f deployment/tech-product-api -n ${{ inputs.namespace }}" >> $GITHUB_STEP_SUMMARY
+        echo "kubectl rollout history deployment/tech-product-api -n ${{ inputs.namespace }}" >> $GITHUB_STEP_SUMMARY
+        echo "```" >> $GITHUB_STEP_SUMMARY 

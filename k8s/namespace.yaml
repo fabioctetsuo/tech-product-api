@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: products-service
+  labels:
+    name: products-service
+    environment: production 

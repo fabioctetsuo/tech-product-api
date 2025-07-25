@@ -1,0 +1,20 @@
+-- InsertData
+INSERT INTO "Produto" ("id", "nome", "descricao", "preco", "tempo_preparo", "imagem", "categoria_id", "created_at", "updated_at") VALUES
+    -- Acompanhamentos
+    (gen_random_uuid(), 'Batata Frita', 'Batatas fritas crocantes por fora e macias por dentro, temperadas com sal e servidas bem quentinhas. Porção generosa ideal para compartilhar.', 14.90, 300, 'https://images.unsplash.com/photo-1630431341973-02e1b662ec35', (SELECT id FROM "Categoria" WHERE nome = 'Acompanhamento'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    
+    -- Bebidas
+    (gen_random_uuid(), 'Coca-Cola', 'Refrigerante Coca-Cola gelado, 350ml. O sabor inconfundível que todo mundo ama.', 7.90, 0, 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97', (SELECT id FROM "Categoria" WHERE nome = 'Bebida'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    
+    -- Lanches
+    (gen_random_uuid(), 'Hambúrguer', 'Hambúrguer artesanal grelhado de 150g, alface crocante, tomate, cebola roxa e molho especial da casa em pão brioche.', 28.90, 600, 'https://images.unsplash.com/photo-1508736793122-f516e3ba5569', (SELECT id FROM "Categoria" WHERE nome = 'Lanche'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'Cheeseburguer', 'Hambúrguer artesanal de 150g, queijo cheddar derretido, alface, tomate, cebola roxa e molho especial da casa em pão brioche.', 32.90, 600, 'https://images.unsplash.com/photo-1619901282828-7cbde1c89884', (SELECT id FROM "Categoria" WHERE nome = 'Lanche'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'Cheesebacon', 'Hambúrguer artesanal de 150g, queijo cheddar derretido, bacon crocante, alface, tomate, cebola roxa e molho especial da casa em pão brioche.', 34.90, 600, 'https://images.unsplash.com/photo-1603508102971-03777763fdf2', (SELECT id FROM "Categoria" WHERE nome = 'Lanche'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    
+    -- Sobremesas
+    (gen_random_uuid(), 'Milkshake Morango', 'Milkshake cremoso de morango feito com sorvete artesanal, leite, calda de morango e chantilly. 400ml.', 18.90, 120, 'https://images.unsplash.com/photo-1686638745403-d21193f16b2f', (SELECT id FROM "Categoria" WHERE nome = 'Sobremesa'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'Milkshake Chocolate', 'Milkshake cremoso de chocolate feito com sorvete artesanal, leite, calda de chocolate e chantilly. 400ml.', 18.90, 120, 'https://images.unsplash.com/photo-1572490122747-3968b75cc699', (SELECT id FROM "Categoria" WHERE nome = 'Sobremesa'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'Milkshake Ninho e Nutella', 'Milkshake premium com leite Ninho, Nutella, sorvete artesanal de baunilha e chantilly. Uma combinação irresistível! 400ml.', 22.90, 120, 'https://images.unsplash.com/photo-1541658016709-82535e94bc69', (SELECT id FROM "Categoria" WHERE nome = 'Sobremesa'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'Sorvete Baunilha', 'Sorvete artesanal de baunilha cremoso e suave. Feito com ingredientes selecionados. 2 bolas.', 12.90, 60, 'https://images.unsplash.com/photo-1729462043504-077634af6223', (SELECT id FROM "Categoria" WHERE nome = 'Sobremesa'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'Sorvete Chocolate', 'Sorvete artesanal de chocolate belga, rico e cremoso. Feito com cacau de alta qualidade. 2 bolas.', 12.90, 60, 'https://images.unsplash.com/photo-1673551493011-2b5f771013d4', (SELECT id FROM "Categoria" WHERE nome = 'Sobremesa'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    (gen_random_uuid(), 'Sorvete Morango', 'Sorvete artesanal de morango, feito com frutas frescas selecionadas. Sabor natural e refrescante. 2 bolas.', 12.90, 60, 'https://images.unsplash.com/photo-1532678465554-94846274c297', (SELECT id FROM "Categoria" WHERE nome = 'Sobremesa'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP); 

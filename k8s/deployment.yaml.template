@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tech-product-api
+  namespace: products-service
+  labels:
+    app: tech-product-api
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tech-product-api
+  template:
+    metadata:
+      labels:
+        app: tech-product-api
+        version: v1
+    spec:
+      containers:
+      - name: tech-product-api
+        image: ${DOCKER_IMAGE}
+        ports:
+        - containerPort: 3001
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: tech-product-api-config
+              key: NODE_ENV
+        - name: SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: tech-product-api-config
+              key: SERVICE_PORT
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: tech-product-api-secret
+              key: DATABASE_URL
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 10"] 

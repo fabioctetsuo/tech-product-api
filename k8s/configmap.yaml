@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tech-product-api-config
+  namespace: products-service
+data:
+  NODE_ENV: "production"
+  SERVICE_PORT: "3001"
+  # Database configuration will be set via environment variables
+  # DATABASE_URL will be provided via Secret 

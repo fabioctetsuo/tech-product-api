@@ -1,0 +1,248 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+        
+    - name: Install dependencies and fix Prisma issues
+      run: |
+        # Use the Prisma fix script to handle installation issues
+        ./scripts/fix-prisma.sh fix
+      
+    # - name: Run linting
+    #   run: npm run lint
+      
+    # - name: Run tests
+    #   run: npm test
+      
+    - name: Build application
+      run: npm run build
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+        
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: us-east-1
+        
+    - name: Update kube config
+      run: aws eks update-kubeconfig --region us-east-1 --name tech_challenge_cluster
+      
+    - name: Get database URL from AWS RDS
+      id: database-url
+      run: |
+        # Get database URL dynamically from AWS RDS
+        echo "🔍 Getting database URL from AWS RDS..."
+        
+        # Get RDS instance details (dynamic parts)
+        RDS_ENDPOINT=$(aws rds describe-db-instances \
+          --db-instance-identifier tech-challenge-products-db \
+          --query 'DBInstances[0].Endpoint.Address' \
+          --output text \
+          --region us-east-1)
+        
+        RDS_PORT=$(aws rds describe-db-instances \
+          --db-instance-identifier tech-challenge-products-db \
+          --query 'DBInstances[0].Endpoint.Port' \
+          --output text \
+          --region us-east-1)
+        
+        # Get credentials from GitHub secrets (static parts)
+        DB_USERNAME="${{ secrets.DB_USERNAME }}"
+        DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
+        DB_NAME="${{ secrets.DB_NAME }}"
+        
+        # Verify GitHub secrets are set
+        if [ -z "$DB_USERNAME" ] || [ -z "$DB_PASSWORD" ] || [ -z "$DB_NAME" ]; then
+          echo "❌ Missing required GitHub secrets!"
+          echo "Please set the following secrets in your GitHub repository:"
+          echo "  - DB_USERNAME"
+          echo "  - DB_PASSWORD" 
+          echo "  - DB_NAME"
+          echo ""
+          echo "You can set them by running: npm run setup-secrets"
+          exit 1
+        fi
+        
+        echo "✅ All required GitHub secrets are set"
+        
+        # Construct the database URL
+        DATABASE_URL="postgresql://${DB_USERNAME}:${DB_PASSWORD}@${RDS_ENDPOINT}:${RDS_PORT}/${DB_NAME}"
+        
+        echo "database_url=$DATABASE_URL" >> $GITHUB_OUTPUT
+        echo "✅ Database URL retrieved dynamically from AWS RDS"
+        echo "Endpoint: $RDS_ENDPOINT"
+        echo "Port: $RDS_PORT"
+        echo "Database: $DB_NAME"
+        
+        # Verify database connection (without exposing credentials)
+        echo "🔍 Testing database connectivity..."
+        if nc -z "$RDS_ENDPOINT" "$RDS_PORT" 2>/dev/null; then
+          echo "✅ Database endpoint is reachable"
+        else
+          echo "❌ Database endpoint is not reachable"
+          echo "This might indicate:"
+          echo "1. RDS instance is not running"
+          echo "2. Security group doesn't allow connections from EKS"
+          echo "3. Network connectivity issues"
+        fi
+        
+    - name: Create or update Secret
+      run: |
+        # Use the database URL from AWS RDS
+        kubectl create secret generic tech-product-api-secret \
+          --from-literal=DATABASE_URL="${{ steps.database-url.outputs.database_url }}" \
+          --namespace=products-service \
+          --dry-run=client -o yaml | kubectl apply -f -
+        
+    - name: Run database migrations
+      run: |
+        # Generate migration job
+        export DOCKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        envsubst < k8s/migration-job.yaml > k8s/migration-job-generated.yaml
+        
+        # Apply migration job
+        kubectl apply -f k8s/migration-job-generated.yaml
+        
+        # Wait for migration job to complete with better error handling
+        echo "Waiting for migration job to complete..."
+        
+        # Check job status every 10 seconds for up to 5 minutes
+        for i in {1..30}; do
+          echo "Checking migration job status (attempt $i/30)..."
+          
+          # Get job status
+          JOB_STATUS=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.conditions[0].type}' 2>/dev/null || echo "Unknown")
+          echo "Job status: $JOB_STATUS"
+          
+          # Get pod logs if job is running
+          POD_NAME=$(kubectl get pods -n products-service -l job-name=tech-product-api-migration -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$POD_NAME" ]; then
+            echo "Pod name: $POD_NAME"
+            echo "Pod status: $(kubectl get pod $POD_NAME -n products-service -o jsonpath='{.status.phase}')"
+            echo "Recent logs:"
+            kubectl logs $POD_NAME -n products-service --tail=20 || echo "No logs available"
+          fi
+          
+          # Check if job completed
+          if [ "$JOB_STATUS" = "Complete" ]; then
+            echo "✅ Migration job completed successfully!"
+            break
+          elif [ "$JOB_STATUS" = "Failed" ]; then
+            echo "❌ Migration job failed!"
+            echo "Full job description:"
+            kubectl describe job tech-product-api-migration -n products-service
+            echo "Pod logs:"
+            kubectl logs $POD_NAME -n products-service || echo "No logs available"
+            exit 1
+          fi
+          
+          # Wait 10 seconds before next check
+          sleep 10
+        done
+        
+        # Final check
+        if [ "$JOB_STATUS" != "Complete" ]; then
+          echo "❌ Migration job timed out after 5 minutes!"
+          echo "Job description:"
+          kubectl describe job tech-product-api-migration -n products-service
+          echo "Pod logs:"
+          kubectl logs $POD_NAME -n products-service || echo "No logs available"
+          exit 1
+        fi
+        
+        # Clean up migration job
+        kubectl delete -f k8s/migration-job-generated.yaml
+        
+    - name: Deploy to Kubernetes
+      run: |
+        # Generate Kubernetes manifests
+        envsubst < k8s/deployment.yaml.template > k8s/deployment.yaml
+        envsubst < k8s/service.yaml.template > k8s/service.yaml
+        envsubst < k8s/ingress.yaml.template > k8s/ingress.yaml
+        
+        # Apply manifests
+        kubectl apply -f k8s/namespace.yaml
+        kubectl apply -f k8s/configmap.yaml
+        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f k8s/service.yaml
+        kubectl apply -f k8s/ingress.yaml
+        kubectl apply -f k8s/hpa.yaml
+        
+        # Wait for deployment to be ready
+        kubectl rollout status deployment/tech-product-api -n products-service --timeout=300s
+      env:
+        DOCKER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        SERVICE_NAME: tech-product-api
+        SERVICE_PORT: "3001"
+        NAMESPACE: products-service
+        DOMAIN_NAME: tech-challenge.local 

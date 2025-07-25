@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # Product API
+  product-api:
+    container_name: tech-product-api
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - '3001:3001'
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@product-postgres:5432/${POSTGRES_DB:-product_db}
+    depends_on:
+      - product-postgres
+    restart: unless-stopped
+
+  # PostgreSQL Database for Product Service
+  product-postgres:
+    container_name: product-postgres
+    image: postgres:16-alpine
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-product_db}
+    volumes:
+      - product_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  product_postgres_data: 

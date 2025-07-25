@@ -1,0 +1,6 @@
+export enum CategoriaType {
+  BEBIDA = 'BEBIDA',
+  SOBREMESA = 'SOBREMESA',
+  ACOMPANHAMENTO = 'ACOMPANHAMENTO',
+  LANCHE = 'LANCHE',
+} 
