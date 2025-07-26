@@ -63,6 +63,10 @@ run_migrations() {
     print_status "Waiting for database to be ready..."
     sleep 10
     
+    # Generate Prisma client
+    print_status "Generating Prisma client..."
+    docker-compose exec product-api npx prisma generate
+    
     # Run migrations
     print_status "Running Product API migrations..."
     docker-compose exec product-api npx prisma migrate deploy

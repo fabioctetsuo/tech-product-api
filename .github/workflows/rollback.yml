@@ -79,17 +79,17 @@ jobs:
       run: |
         echo "🏥 Performing health check..."
         
-        # Get the service URL
-        SERVICE_URL=$(kubectl get ingress tech-product-api-ingress -n ${{ inputs.namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+        # Get the LoadBalancer service URL
+        SERVICE_URL=$(kubectl get svc products-service-loadbalancer -n ${{ inputs.namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
         
         if [ -n "$SERVICE_URL" ]; then
-          echo "Service URL: http://$SERVICE_URL"
+          echo "Service URL: http://$SERVICE_URL:3001"
           
           # Wait a bit for the service to be ready
           sleep 30
           
           # Perform health check
-          if curl -f -s "http://$SERVICE_URL/health" > /dev/null; then
+          if curl -f -s "http://$SERVICE_URL:3001/health" > /dev/null; then
             echo "✅ Service is healthy after rollback"
           else
             echo "⚠️  Health check failed, but rollback completed"

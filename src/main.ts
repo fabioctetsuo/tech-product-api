@@ -13,8 +13,6 @@ async function bootstrap() {
     .setTitle('Tech Product API')
     .setDescription('Product management microservice')
     .setVersion('1.0')
-    .addTag('products')
-    .addTag('categories')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

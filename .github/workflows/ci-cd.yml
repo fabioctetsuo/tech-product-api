@@ -248,14 +248,12 @@ jobs:
         # Generate Kubernetes manifests
         envsubst < k8s/deployment.yaml.template > k8s/deployment.yaml
         envsubst < k8s/service.yaml.template > k8s/service.yaml
-        envsubst < k8s/ingress.yaml.template > k8s/ingress.yaml
         
         # Apply manifests
         kubectl apply -f k8s/namespace.yaml
         kubectl apply -f k8s/configmap.yaml
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
-        kubectl apply -f k8s/ingress.yaml
         kubectl apply -f k8s/hpa.yaml
         
         # Wait for deployment to be ready

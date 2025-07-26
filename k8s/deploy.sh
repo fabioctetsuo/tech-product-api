@@ -184,14 +184,12 @@ deploy_application() {
     # Generate manifests with environment variables
     envsubst < k8s/deployment.yaml.template > k8s/deployment-generated.yaml
     envsubst < k8s/service.yaml.template > k8s/service-generated.yaml
-    envsubst < k8s/ingress.yaml.template > k8s/ingress-generated.yaml
     
     # Apply manifests
     kubectl apply -f k8s/namespace.yaml
     kubectl apply -f k8s/configmap.yaml
     kubectl apply -f k8s/deployment-generated.yaml
     kubectl apply -f k8s/service-generated.yaml
-    kubectl apply -f k8s/ingress-generated.yaml
     kubectl apply -f k8s/hpa.yaml
     
     # Wait for deployment to be ready
@@ -205,17 +203,17 @@ deploy_application() {
 check_health() {
     print_status "Checking service health..."
     
-    # Get the service URL
-    SERVICE_URL=$(kubectl get ingress tech-product-api-ingress -n products-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+    # Get the LoadBalancer service URL
+    SERVICE_URL=$(kubectl get svc products-service-loadbalancer -n products-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
     
     if [ -n "$SERVICE_URL" ]; then
-        print_status "Service URL: http://$SERVICE_URL"
+        print_status "Service URL: http://$SERVICE_URL:3001"
         
         # Wait a bit for the service to be fully ready
         sleep 10
         
         # Check health endpoint
-        if curl -f -s "http://$SERVICE_URL/health" > /dev/null; then
+        if curl -f -s "http://$SERVICE_URL:3001/health" > /dev/null; then
             print_status "✅ Service is healthy"
         else
             print_warning "⚠️  Service health check failed, but deployment completed"
@@ -238,7 +236,7 @@ show_info() {
     echo "Useful Commands:"
     echo "  kubectl get pods -n products-service"
     echo "  kubectl logs -f deployment/tech-product-api -n products-service"
-    echo "  kubectl describe ingress tech-product-api-ingress -n products-service"
+    echo "  kubectl get svc -n products-service"
     echo ""
 }
 
