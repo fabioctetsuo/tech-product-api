@@ -98,9 +98,78 @@ run_migrations() {
     # Apply migration job
     kubectl apply -f k8s/migration-job-generated.yaml
     
-    # Wait for migration job to complete
+    # Wait for migration job to complete with better error handling
     print_status "Waiting for migration job to complete..."
-    kubectl wait --for=condition=complete job/tech-product-api-migration -n products-service --timeout=300s
+    
+    # First, try using kubectl wait with the correct condition
+    if kubectl wait --for=condition=complete job/tech-product-api-migration -n products-service --timeout=300s 2>/dev/null; then
+        print_status "✅ Migration job completed successfully using kubectl wait!"
+    else
+        print_status "kubectl wait timed out, checking job status manually..."
+        
+        # Alternative: Check if job has succeeded by looking at completion status
+        JOB_SUCCEEDED_COUNT=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "0")
+        if [ "$JOB_SUCCEEDED_COUNT" = "1" ]; then
+            print_status "✅ Migration job completed successfully (succeeded count: $JOB_SUCCEEDED_COUNT)!"
+        else
+            print_status "Job not completed yet, checking status manually..."
+            
+            # Check job status every 10 seconds for up to 5 minutes
+    for i in {1..30}; do
+        print_status "Checking migration job status (attempt $i/30)..."
+        
+        # Get job status - check for both Complete and Succeeded conditions
+        JOB_COMPLETE=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null || echo "Unknown")
+        JOB_SUCCEEDED=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.conditions[?(@.type=="Succeeded")].status}' 2>/dev/null || echo "Unknown")
+        JOB_FAILED=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || echo "Unknown")
+        
+        print_status "Job Complete status: $JOB_COMPLETE"
+        print_status "Job Succeeded status: $JOB_SUCCEEDED"
+        print_status "Job Failed status: $JOB_FAILED"
+        
+        # Get pod logs if job is running
+        POD_NAME=$(kubectl get pods -n products-service -l job-name=tech-product-api-migration -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+        if [ -n "$POD_NAME" ]; then
+            print_status "Pod name: $POD_NAME"
+            print_status "Pod status: $(kubectl get pod $POD_NAME -n products-service -o jsonpath='{.status.phase}')"
+            print_status "Recent logs:"
+            kubectl logs $POD_NAME -n products-service --tail=20 || echo "No logs available"
+        fi
+        
+        # Check if job completed successfully
+        if [ "$JOB_COMPLETE" = "True" ] || [ "$JOB_SUCCEEDED" = "True" ]; then
+            print_status "✅ Migration job completed successfully!"
+            break
+        elif [ "$JOB_FAILED" = "True" ]; then
+            print_error "❌ Migration job failed!"
+            print_error "Full job description:"
+            kubectl describe job tech-product-api-migration -n products-service
+            print_error "Pod logs:"
+            kubectl logs $POD_NAME -n products-service || echo "No logs available"
+            exit 1
+        fi
+        
+        # Alternative check: look at succeeded count
+        JOB_SUCCEEDED_COUNT=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "0")
+        if [ "$JOB_SUCCEEDED_COUNT" = "1" ]; then
+            print_status "✅ Migration job completed successfully (succeeded count: $JOB_SUCCEEDED_COUNT)!"
+            break
+        fi
+        
+        # Wait 10 seconds before next check
+        sleep 10
+    done
+    
+    # Final check
+    if [ "$JOB_COMPLETE" != "True" ] && [ "$JOB_SUCCEEDED" != "True" ]; then
+        print_error "❌ Migration job timed out after 5 minutes!"
+        print_error "Job description:"
+        kubectl describe job tech-product-api-migration -n products-service
+        print_error "Pod logs:"
+        kubectl logs $POD_NAME -n products-service || echo "No logs available"
+        exit 1
+    fi
+    fi
     
     # Clean up migration job
     kubectl delete -f k8s/migration-job-generated.yaml

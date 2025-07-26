@@ -218,6 +218,51 @@ docker-compose exec product-api npx prisma migrate reset
 docker-compose exec product-api npx prisma migrate status
 ```
 
+### Kubernetes Migration Job Issues
+If you encounter issues with migration jobs in Kubernetes (especially in CI/CD):
+
+```bash
+# Run the troubleshooting script
+./scripts/troubleshoot-migration.sh
+
+# Check job status manually
+kubectl get job tech-product-api-migration -n products-service
+kubectl describe job tech-product-api-migration -n products-service
+
+# Check pod logs
+kubectl get pods -n products-service -l job-name=tech-product-api-migration
+kubectl logs <pod-name> -n products-service
+```
+
+#### Common Migration Job Issues:
+
+1. **Job completes but CI reports timeout**: This was a known issue with job status detection. The scripts have been updated with better status checking logic.
+
+2. **Job stuck in Pending**: Check resource requests/limits and node availability.
+
+3. **Database connection errors**: Verify DATABASE_URL in the Kubernetes secret.
+
+4. **Migration timeout**: Check if migrations are taking too long or if there are database performance issues.
+
+5. **Database connectivity test fails in CI**: This is expected behavior. The RDS instance is in private subnets and not accessible from GitHub Actions runners (which are outside the VPC). The actual connectivity is tested when the migration job runs inside the EKS cluster.
+
+### Network Security
+
+The application uses a secure network configuration:
+
+- **RDS instances** are in private subnets (not publicly accessible)
+- **EKS cluster** can access RDS through security group rules
+- **GitHub Actions runners** cannot directly access RDS (this is by design)
+- **Security groups** are configured to allow only necessary traffic
+
+To update the RDS security group for better security:
+```bash
+cd tech-challenge-fiap-db
+./update-security-groups.sh
+```
+
+This will restrict RDS access to only the EKS cluster instead of allowing connections from anywhere.
+
 ### Port Conflicts
 If port 3001 or 5433 is already in use, modify the ports in `docker-compose.yml`:
 ```yaml

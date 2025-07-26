@@ -144,17 +144,10 @@ jobs:
         echo "Port: $RDS_PORT"
         echo "Database: $DB_NAME"
         
-        # Verify database connection (without exposing credentials)
-        echo "🔍 Testing database connectivity..."
-        if nc -z "$RDS_ENDPOINT" "$RDS_PORT" 2>/dev/null; then
-          echo "✅ Database endpoint is reachable"
-        else
-          echo "❌ Database endpoint is not reachable"
-          echo "This might indicate:"
-          echo "1. RDS instance is not running"
-          echo "2. Security group doesn't allow connections from EKS"
-          echo "3. Network connectivity issues"
-        fi
+        # Note: Database connectivity test is skipped because RDS is in private subnets
+        # and GitHub Actions runners are outside the VPC. This is expected behavior.
+        echo "ℹ️  Database connectivity test skipped (RDS is in private subnets)"
+        echo "ℹ️  The migration job will test connectivity from within the EKS cluster"
         
     - name: Create or update Secret
       run: |
@@ -176,48 +169,75 @@ jobs:
         # Wait for migration job to complete with better error handling
         echo "Waiting for migration job to complete..."
         
-        # Check job status every 10 seconds for up to 5 minutes
-        for i in {1..30}; do
-          echo "Checking migration job status (attempt $i/30)..."
+        # First, try using kubectl wait with the correct condition
+        if kubectl wait --for=condition=complete job/tech-product-api-migration -n products-service --timeout=300s 2>/dev/null; then
+          echo "✅ Migration job completed successfully using kubectl wait!"
+        else
+          echo "kubectl wait timed out, checking job status manually..."
           
-          # Get job status
-          JOB_STATUS=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.conditions[0].type}' 2>/dev/null || echo "Unknown")
-          echo "Job status: $JOB_STATUS"
-          
-          # Get pod logs if job is running
-          POD_NAME=$(kubectl get pods -n products-service -l job-name=tech-product-api-migration -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-          if [ -n "$POD_NAME" ]; then
-            echo "Pod name: $POD_NAME"
-            echo "Pod status: $(kubectl get pod $POD_NAME -n products-service -o jsonpath='{.status.phase}')"
-            echo "Recent logs:"
-            kubectl logs $POD_NAME -n products-service --tail=20 || echo "No logs available"
+          # Alternative: Check if job has succeeded by looking at completion status
+          JOB_SUCCEEDED_COUNT=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "0")
+          if [ "$JOB_SUCCEEDED_COUNT" = "1" ]; then
+            echo "✅ Migration job completed successfully (succeeded count: $JOB_SUCCEEDED_COUNT)!"
+          else
+            echo "Job not completed yet, checking status manually..."
+            
+            # Check job status every 10 seconds for up to 5 minutes
+            for i in {1..30}; do
+              echo "Checking migration job status (attempt $i/30)..."
+              
+              # Get job status - check for both Complete and Succeeded conditions
+              JOB_COMPLETE=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null || echo "Unknown")
+              JOB_SUCCEEDED=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.conditions[?(@.type=="Succeeded")].status}' 2>/dev/null || echo "Unknown")
+              JOB_FAILED=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || echo "Unknown")
+              
+              echo "Job Complete status: $JOB_COMPLETE"
+              echo "Job Succeeded status: $JOB_SUCCEEDED"
+              echo "Job Failed status: $JOB_FAILED"
+              
+              # Get pod logs if job is running
+              POD_NAME=$(kubectl get pods -n products-service -l job-name=tech-product-api-migration -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+              if [ -n "$POD_NAME" ]; then
+                echo "Pod name: $POD_NAME"
+                echo "Pod status: $(kubectl get pod $POD_NAME -n products-service -o jsonpath='{.status.phase}')"
+                echo "Recent logs:"
+                kubectl logs $POD_NAME -n products-service --tail=20 || echo "No logs available"
+              fi
+              
+              # Check if job completed successfully
+              if [ "$JOB_COMPLETE" = "True" ] || [ "$JOB_SUCCEEDED" = "True" ]; then
+                echo "✅ Migration job completed successfully!"
+                break
+              elif [ "$JOB_FAILED" = "True" ]; then
+                echo "❌ Migration job failed!"
+                echo "Full job description:"
+                kubectl describe job tech-product-api-migration -n products-service
+                echo "Pod logs:"
+                kubectl logs $POD_NAME -n products-service || echo "No logs available"
+                exit 1
+              fi
+              
+              # Alternative check: look at succeeded count
+              JOB_SUCCEEDED_COUNT=$(kubectl get job tech-product-api-migration -n products-service -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "0")
+              if [ "$JOB_SUCCEEDED_COUNT" = "1" ]; then
+                echo "✅ Migration job completed successfully (succeeded count: $JOB_SUCCEEDED_COUNT)!"
+                break
+              fi
+                
+              # Wait 10 seconds before next check
+              sleep 10
+            done
+            
+            # Final check
+            if [ "$JOB_COMPLETE" != "True" ] && [ "$JOB_SUCCEEDED" != "True" ]; then
+              echo "❌ Migration job timed out after 5 minutes!"
+              echo "Job description:"
+              kubectl describe job tech-product-api-migration -n products-service
+              echo "Pod logs:"
+              kubectl logs $POD_NAME -n products-service || echo "No logs available"
+              exit 1
+            fi
           fi
-          
-          # Check if job completed
-          if [ "$JOB_STATUS" = "Complete" ]; then
-            echo "✅ Migration job completed successfully!"
-            break
-          elif [ "$JOB_STATUS" = "Failed" ]; then
-            echo "❌ Migration job failed!"
-            echo "Full job description:"
-            kubectl describe job tech-product-api-migration -n products-service
-            echo "Pod logs:"
-            kubectl logs $POD_NAME -n products-service || echo "No logs available"
-            exit 1
-          fi
-          
-          # Wait 10 seconds before next check
-          sleep 10
-        done
-        
-        # Final check
-        if [ "$JOB_STATUS" != "Complete" ]; then
-          echo "❌ Migration job timed out after 5 minutes!"
-          echo "Job description:"
-          kubectl describe job tech-product-api-migration -n products-service
-          echo "Pod logs:"
-          kubectl logs $POD_NAME -n products-service || echo "No logs available"
-          exit 1
         fi
         
         # Clean up migration job
