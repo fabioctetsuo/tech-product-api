@@ -137,7 +137,6 @@ jobs:
         # Generate manifests
         envsubst < k8s/deployment.yaml.template > k8s/deployment-generated.yaml
         envsubst < k8s/service.yaml.template > k8s/service-generated.yaml
-        envsubst < k8s/ingress.yaml.template > k8s/ingress-generated.yaml
         
         # Update replicas in deployment
         sed -i "s/replicas: 2/replicas: ${{ inputs.replicas }}/" k8s/deployment-generated.yaml
@@ -167,7 +166,6 @@ jobs:
         # Apply all manifests
         kubectl apply -f k8s/deployment-generated.yaml
         kubectl apply -f k8s/service-generated.yaml
-        kubectl apply -f k8s/ingress-generated.yaml
         kubectl apply -f k8s/hpa.yaml
         
         # Wait for deployment to be ready
@@ -179,20 +177,19 @@ jobs:
         echo "Checking deployment status..."
         kubectl get pods -n ${{ inputs.namespace }}
         kubectl get services -n ${{ inputs.namespace }}
-        kubectl get ingress -n ${{ inputs.namespace }}
         
     - name: Get service URL
       id: service-url
       run: |
-        # Wait a bit for ingress to be ready
+        # Wait a bit for LoadBalancer to be ready
         sleep 30
         
-        # Get the ingress hostname
-        INGRESS_HOST=$(kubectl get ingress tech-product-api-ingress -n ${{ inputs.namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+        # Get the LoadBalancer service hostname
+        SERVICE_HOST=$(kubectl get svc products-service-loadbalancer -n ${{ inputs.namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
         
-        if [ -n "$INGRESS_HOST" ]; then
-          echo "service_url=http://$INGRESS_HOST" >> $GITHUB_OUTPUT
-          echo "Service URL: http://$INGRESS_HOST"
+        if [ -n "$SERVICE_HOST" ]; then
+          echo "service_url=http://$SERVICE_HOST:3001" >> $GITHUB_OUTPUT
+          echo "Service URL: http://$SERVICE_HOST:3001"
         else
           echo "service_url=Not available yet" >> $GITHUB_OUTPUT
           echo "Service URL not available yet"

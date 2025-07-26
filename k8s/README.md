@@ -59,12 +59,10 @@ kubectl create secret generic tech-product-api-secret \
 # 4. Generate manifests with environment variables
 envsubst < k8s/deployment.yaml.template > k8s/deployment.yaml
 envsubst < k8s/service.yaml.template > k8s/service.yaml
-envsubst < k8s/ingress.yaml.template > k8s/ingress.yaml
 
 # 5. Apply manifests
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
-kubectl apply -f k8s/ingress.yaml
 kubectl apply -f k8s/hpa.yaml
 
 # 6. Run migrations
@@ -102,9 +100,6 @@ kubectl get pods -n products-service
 # Check services
 kubectl get services -n products-service
 
-# Check ingress
-kubectl get ingress -n products-service
-
 # Check HPA
 kubectl get hpa -n products-service
 ```
@@ -122,8 +117,9 @@ kubectl logs -f <pod-name> -n products-service
 ### Health Checks
 
 ```bash
-# Check health endpoint
-curl http://your-ingress-url/health
+# Check health endpoint via LoadBalancer
+kubectl get svc products-service-loadbalancer -n products-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+curl http://your-loadbalancer-url:3001/health
 
 # Check service directly
 kubectl port-forward service/tech-product-api-service 3001:3001 -n products-service
@@ -152,7 +148,7 @@ kubectl scale deployment tech-product-api --replicas=3 -n products-service
 
 1. **Deployment**: Runs 2 replicas of the application
 2. **Service**: ClusterIP service exposing port 3001
-3. **Ingress**: ALB Ingress Controller for external access
+3. **LoadBalancer Service**: AWS ALB for external access (created by infrastructure)
 4. **HPA**: Automatic scaling based on resource usage
 5. **ConfigMap**: Non-sensitive configuration
 6. **Secret**: Sensitive data (database credentials)
@@ -160,7 +156,7 @@ kubectl scale deployment tech-product-api --replicas=3 -n products-service
 ### Network Flow
 
 ```
-Internet → ALB Ingress → Service → Pods
+Internet → AWS ALB (LoadBalancer Service) → Service → Pods
 ```
 
 ### Resource Limits

@@ -45,11 +45,12 @@ AWS_SECRET_ACCESS_KEY=your-aws-secret-key
 
 This will output the database endpoint. You'll need to construct the full DATABASE_URL with your credentials.
 
-### 3. Update Ingress Configuration
+### 3. Verify Infrastructure
 
-Edit `k8s/ingress.yaml.template` and replace:
-- `ACCOUNT_ID` with your AWS account ID
-- `CERTIFICATE_ID` with your SSL certificate ARN (if using HTTPS)
+Ensure the infrastructure is deployed and the LoadBalancer service is available:
+```bash
+kubectl get svc products-service-loadbalancer -n products-service
+```
 
 ## 🚀 Deployment Options
 
@@ -87,23 +88,20 @@ kubectl get pods -n products-service
 
 # Check services
 kubectl get services -n products-service
-
-# Check ingress
-kubectl get ingress -n products-service
 ```
 
 ### Test the Application
 
 ```bash
-# Get the service URL
-kubectl get ingress tech-product-api-ingress -n products-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+# Get the LoadBalancer service URL
+kubectl get svc products-service-loadbalancer -n products-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 
 # Test health endpoint
-curl http://your-ingress-url/health
+curl http://your-loadbalancer-url:3001/health
 
 # Test API endpoints
-curl http://your-ingress-url/categorias
-curl http://your-ingress-url/produtos
+curl http://your-loadbalancer-url:3001/categorias
+curl http://your-loadbalancer-url:3001/produtos
 ```
 
 ### View Logs
@@ -131,9 +129,9 @@ kubectl logs job/tech-product-api-migration -n products-service
    - Check RDS security groups allow EKS access
    - Verify database credentials
 
-3. **Ingress not working**:
+3. **LoadBalancer not working**:
    ```bash
-   kubectl describe ingress tech-product-api-ingress -n products-service
+   kubectl describe svc products-service-loadbalancer -n products-service
    ```
 
 4. **Migration failures**:
@@ -194,7 +192,7 @@ The application provides health checks at `/health` endpoint:
 ### Network Security
 
 - Service uses ClusterIP (internal access only)
-- External access via ALB Ingress Controller
+- External access via AWS ALB (LoadBalancer service)
 - SSL termination at the load balancer
 
 ### Container Security
