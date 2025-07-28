@@ -39,7 +39,8 @@ export class CategoriaUseCases {
       throw new ValidationException(ValidationErrorType.CATEGORIA_NOT_FOUND);
     }
 
-    const { id: _, ...updateData } = dados;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: _unused, ...updateData } = dados;
 
     const updatedCategoria = new Categoria(updateData as Partial<Categoria>);
 

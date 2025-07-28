@@ -1,213 +1,210 @@
-# GitHub Actions Workflows Guide
+# GitHub Actions Workflows
 
-This directory contains all the GitHub Actions workflows for the Product API microservice.
+This directory contains GitHub Actions workflows for the tech-product-api microservice.
 
 ## 📋 Available Workflows
 
-### 1. CI/CD Pipeline (`ci-cd.yml`)
-**Trigger**: Automatic on push to main branch or pull requests
+### 1. Pull Request Validation (`pull-request.yml`)
 
-**What it does**:
-- Runs tests and linting
-- Builds Docker image and pushes to Docker Hub
-- Deploys to AWS EKS cluster
+**Trigger**: Pull requests to `main` or `master` branch
 
-**Required Secrets**:
-- `DOCKERHUB_USERNAME`
-- `DOCKERHUB_TOKEN`
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
+**Purpose**: Validates code quality, tests, and build before merging
 
-### 2. Manual Deploy (`manual-deploy.yml`)
-**Trigger**: Manual (workflow_dispatch)
+**Jobs**:
+- **Build and Test Validation**: Runs linting, tests with coverage validation, and build verification
+- **Security Scan**: Performs security audits and vulnerability scanning
 
-**What it does**:
-- Deploys any Docker image to AWS EKS
-- Runs database migrations
-- Configurable environment, namespace, and replicas
+**Quality Gates**:
+- ✅ ESLint passes (code quality)
+- ✅ All tests pass (239+ test cases)
+- ✅ Test coverage ≥ 80% (currently 82.51%)
+- ✅ Build succeeds
+- ✅ Security audit passes
+- ✅ No high-severity vulnerabilities
 
-**Inputs**:
-- `docker_image`: Docker image to deploy (e.g., `username/tech-product-api:latest`)
-- `database_url`: Database connection string
-- `environment`: Environment name (production/staging)
-- `namespace`: Kubernetes namespace (default: `products-service`)
-- `replicas`: Number of replicas (default: `2`)
+### 2. CI/CD Pipeline (`ci-cd.yml`)
 
-**Usage**:
-1. Go to GitHub Actions tab
-2. Select "Manual Deploy to AWS"
-3. Click "Run workflow"
-4. Fill in the required inputs
-5. Click "Run workflow"
+**Trigger**: Push to `main` branch and pull requests
 
-### 3. Rollback (`rollback.yml`)
-**Trigger**: Manual (workflow_dispatch)
+**Purpose**: Full CI/CD pipeline including deployment to production
 
-**What it does**:
-- Rolls back to a previous deployment version
-- Performs health checks after rollback
+**Jobs**:
+- **test**: Validates build and tests
+- **build-and-push**: Builds and pushes Docker image (main branch only)
+- **deploy**: Deploys to Kubernetes cluster (main branch only)
 
-**Inputs**:
-- `namespace`: Kubernetes namespace (default: `products-service`)
-- `revision`: Revision number to rollback to (optional, defaults to previous)
+## 🚀 Pull Request Process
 
-**Usage**:
-1. Go to GitHub Actions tab
-2. Select "Rollback Deployment"
-3. Click "Run workflow"
-4. Optionally specify a revision number
-5. Click "Run workflow"
+### Before Creating a PR
 
-### 4. Scale (`scale.yml`)
-**Trigger**: Manual (workflow_dispatch)
+1. **Ensure local tests pass**:
+   ```bash
+   npm run test:cov
+   ```
 
-**What it does**:
-- Scales the deployment up or down
-- Supports absolute scaling or relative scaling
+2. **Check coverage meets requirements**:
+   ```bash
+   npm run test:cov
+   # Verify coverage is ≥ 80%
+   ```
 
-**Inputs**:
-- `namespace`: Kubernetes namespace (default: `products-service`)
-- `replicas`: Number of replicas
-- `action`: Scaling action (scale/scale-up/scale-down)
+3. **Run linting**:
+   ```bash
+   npm run lint
+   ```
 
-**Usage**:
-1. Go to GitHub Actions tab
-2. Select "Scale Deployment"
-3. Click "Run workflow"
-4. Choose scaling action and number of replicas
-5. Click "Run workflow"
+4. **Build the application**:
+   ```bash
+   npm run build
+   ```
 
-## 🔧 Workflow Examples
+### Creating a Pull Request
 
-### Deploy a Specific Version
-```yaml
-# Manual Deploy inputs
-docker_image: your-username/tech-product-api:v1.2.3
-database_url: postgresql://user:password@host:5432/database
-environment: production
-namespace: products-service
-replicas: 3
-```
+1. **Create a feature branch**:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
-### Rollback to Previous Version
-```yaml
-# Rollback inputs
-namespace: products-service
-revision: (leave empty for previous)
-```
+2. **Make your changes and commit**:
+   ```bash
+   git add .
+   git commit -m "feat: add your feature description"
+   ```
 
-### Scale Up for High Traffic
-```yaml
-# Scale inputs
-namespace: products-service
-replicas: 2
-action: scale-up
-```
+3. **Push to remote**:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
 
-### Scale Down for Cost Optimization
-```yaml
-# Scale inputs
-namespace: products-service
-replicas: 1
-action: scale-down
-```
+4. **Create Pull Request** on GitHub targeting `main` branch
 
-## 🚨 Troubleshooting
+### PR Validation Process
+
+The PR validation workflow will automatically run and check:
+
+1. **Code Quality**:
+   - ESLint validation
+   - TypeScript compilation
+   - Code formatting
+
+2. **Testing**:
+   - Unit tests execution (239+ tests)
+   - Coverage validation (≥80% required)
+   - BDD test scenarios validation
+
+3. **Build Validation**:
+   - Application build
+   - Build artifacts verification
+
+4. **Security**:
+   - npm audit
+   - Snyk vulnerability scan
+
+### PR Requirements
+
+**Branch Protection Rules** require:
+
+- ✅ All status checks must pass
+- ✅ At least 1 approving review
+- ✅ Branch must be up to date with main
+- ✅ No merge conflicts
+- ✅ Conversation resolution (if any)
+
+### PR Comments
+
+The workflow automatically comments on PRs with:
+
+- 📊 Test coverage summary
+- ✅ Quality gate status
+- 🎯 Ready for merge confirmation
+
+## 📊 Test Coverage Requirements
+
+### Current Coverage: 82.51%
+
+**Coverage Breakdown**:
+- **Statements**: 82.51%
+- **Branches**: 85.18%
+- **Functions**: 83.15%
+- **Lines**: 82.22%
+
+**Test Suites**: 13
+- Domain Layer: 100% coverage
+- Business Layer: 97%+ coverage
+- Application Layer: 100% coverage
+- Infrastructure Layer: 69%+ coverage
+
+### Coverage Validation
+
+The workflow validates:
+- Minimum 80% overall coverage
+- All test suites pass
+- BDD implementation included
+
+## 🔧 Troubleshooting
 
 ### Common Issues
 
-1. **Workflow fails with AWS credentials error**:
-   - Verify AWS secrets are set correctly
-   - Check that AWS credentials have EKS permissions
+1. **Coverage Below 80%**:
+   - Add more unit tests
+   - Ensure all code paths are tested
+   - Check for untested edge cases
 
-2. **Workflow fails with Docker Hub error**:
-   - Verify Docker Hub credentials
-   - Check that the image exists in Docker Hub
+2. **Linting Errors**:
+   - Run `npm run lint` locally
+   - Fix formatting issues
+   - Address ESLint warnings
 
-3. **Deployment fails**:
-   - Check Kubernetes cluster is accessible
-   - Verify namespace exists
-   - Check database connection string
+3. **Build Failures**:
+   - Check TypeScript compilation
+   - Verify all imports are correct
+   - Ensure no missing dependencies
 
-4. **Rollback fails**:
-   - Verify deployment has previous revisions
-   - Check deployment history with kubectl
+4. **Security Vulnerabilities**:
+   - Run `npm audit fix`
+   - Update vulnerable dependencies
+   - Review Snyk recommendations
 
-### Debugging Commands
+### Manual Workflow Trigger
 
-```bash
-# Check deployment history
-kubectl rollout history deployment/tech-product-api -n products-service
+You can manually trigger the PR validation:
 
-# Check current status
-kubectl get pods -n products-service
+1. Go to Actions tab in GitHub
+2. Select "Pull Request Validation"
+3. Click "Run workflow"
+4. Select branch and click "Run workflow"
 
-# Check logs
-kubectl logs -f deployment/tech-product-api -n products-service
+## 📈 Quality Metrics
 
-# Check events
-kubectl get events -n products-service --sort-by='.lastTimestamp'
-```
+### Code Quality
+- ESLint: 0 errors, 0 warnings
+- TypeScript: Strict mode enabled
+- Prettier: Consistent formatting
 
-## 🔒 Security Considerations
-
-### Secrets Management
-- All sensitive data (AWS credentials, Docker Hub tokens, database URLs) are stored as GitHub secrets
-- Secrets are encrypted and only accessible during workflow execution
-- Never commit secrets to the repository
-
-### Access Control
-- Workflows run with the permissions of the GitHub repository
-- Ensure only authorized users can trigger manual workflows
-- Consider using branch protection rules
-
-### Network Security
-- Workflows connect to AWS EKS cluster
-- Database connections use secure URLs
-- All communication is over HTTPS
-
-## 📊 Monitoring
-
-### Workflow Monitoring
-- Monitor workflow runs in GitHub Actions tab
-- Set up notifications for workflow failures
-- Use workflow summaries for deployment status
-
-### Application Monitoring
-- Health checks are performed after each deployment
-- Service URLs are provided in workflow summaries
-- Use kubectl commands for detailed monitoring
-
-## 🔄 Best Practices
-
-### Deployment
-1. Always test changes locally first
-2. Use semantic versioning for Docker images
-3. Deploy to staging before production
-4. Monitor deployments closely
-
-### Rollback
-1. Keep deployment history clean
-2. Test rollback procedures regularly
-3. Have a rollback plan for critical deployments
-
-### Scaling
-1. Monitor resource usage before scaling
-2. Use HPA for automatic scaling when possible
-3. Scale down during low-traffic periods
+### Testing
+- Unit Tests: 239+ test cases
+- Coverage: 82.51% (above 80% requirement)
+- BDD: Implemented across all test suites
+- Mocking: Comprehensive dependency mocking
 
 ### Security
-1. Rotate secrets regularly
-2. Use least-privilege access
-3. Monitor for unauthorized access
-4. Keep dependencies updated
+- npm audit: No moderate+ vulnerabilities
+- Snyk: No high-severity issues
+- Dependencies: Regularly updated
+
+## 🎯 Best Practices
+
+1. **Write Tests First**: Follow TDD/BDD approach
+2. **Maintain Coverage**: Keep coverage above 80%
+3. **Code Quality**: Follow ESLint rules
+4. **Security**: Regular dependency updates
+5. **Documentation**: Update docs with changes
+6. **Small PRs**: Keep changes focused and reviewable
 
 ## 📞 Support
 
-If you encounter issues:
-
-1. Check the troubleshooting section
-2. Review workflow logs in GitHub Actions
-3. Verify infrastructure configuration
-4. Check application logs in Kubernetes
-5. Consult the main deployment documentation 
+For workflow issues:
+1. Check the Actions tab for detailed logs
+2. Review the troubleshooting section
+3. Contact the development team
+4. Check GitHub Actions documentation 

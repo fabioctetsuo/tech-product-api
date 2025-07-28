@@ -45,7 +45,8 @@ export class ProdutoUseCases {
       throw new ValidationException(ValidationErrorType.PRODUTO_NOT_FOUND);
     }
 
-    const { id: _, ...updateData } = dados;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: _unused, ...updateData } = dados;
 
     const updatedProduto = new Produto(updateData as Partial<Produto>);
 

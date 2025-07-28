@@ -1,0 +1,38 @@
+# Branch Protection Rules for main/master branch
+# This file documents the required branch protection settings
+
+# Required Status Checks:
+# - Pull Request Validation (pull-request.yml)
+# - CI/CD Pipeline (ci-cd.yml)
+
+# Branch Protection Settings:
+# - Require status checks to pass before merging
+# - Require branches to be up to date before merging
+# - Require pull request reviews before merging
+# - Require at least 1 approving review
+# - Dismiss stale PR approvals when new commits are pushed
+# - Require conversation resolution before merging
+
+# To configure these settings in GitHub:
+# 1. Go to Settings > Branches
+# 2. Add rule for main/master branch
+# 3. Enable the following options:
+#    ✅ Require a pull request before merging
+#    ✅ Require approvals (1)
+#    ✅ Dismiss stale PR approvals when new commits are pushed
+#    ✅ Require status checks to pass before merging
+#    ✅ Require branches to be up to date before merging
+#    ✅ Require conversation resolution before merging
+#    ✅ Include administrators
+#    ✅ Restrict pushes that create files that are larger than 100 MB
+
+# Required Status Checks:
+# - Pull Request Validation / Build and Test Validation
+# - Pull Request Validation / Security Scan
+# - CI/CD Pipeline / test
+# - CI/CD Pipeline / build-and-push (for main branch only)
+
+# Additional Settings:
+# - Allow force pushes: ❌ Disabled
+# - Allow deletions: ❌ Disabled
+# - Lock branch: ❌ Disabled (for development workflow) 
