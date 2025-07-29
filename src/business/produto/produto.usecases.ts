@@ -50,7 +50,6 @@ export class ProdutoUseCases {
 
     const updatedProduto = new Produto(updateData as Partial<Produto>);
 
-    console.log({ id, updatedProduto });
     return this.produtoRepository.update(id, updatedProduto);
   }
 
